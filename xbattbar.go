@@ -20,6 +20,10 @@ var popup_win xproto.Window
 var horizontal bool
 var bar_length uint16
 var bar_width uint16 = 3
+var popup_visible = false
+
+var current_state *PowerStatus
+
 var (
 	color_black          uint32 = 0xFF000000
 	color_white          uint32 = 0xFFFFFFFF
@@ -100,24 +104,27 @@ func main() {
 		xproto.WindowClassInputOutput,
 		screen.RootVisual,
 		xproto.CwBackPixel|
-			xproto.CwEventMask|
-			xproto.CwOverrideRedirect,
+			xproto.CwEventMask,
 		[]uint32{
 			0xFF00FF00,
-			0,
 			xproto.EventMaskStructureNotify |
 				xproto.EventMaskKeyPress |
-				xproto.EventMaskKeyRelease,
+				xproto.EventMaskKeyRelease |
+				xproto.EventMaskEnterWindow |
+				xproto.EventMaskLeaveWindow ,
 		})
 
 	xproto.CreateWindow(X, screen.RootDepth, popup_win, screen.Root,
-		0, 0, 50, 50, 1,
+		int16(screen.WidthInPixels / 2), int16(screen.HeightInPixels/2),
+		50, 50, 1,
 		xproto.WindowClassInputOutput,
 		screen.RootVisual,
 		xproto.CwBackPixel|
+			xproto.CwWinGravity|
 			xproto.CwOverrideRedirect,
 		[]uint32{
 			0xFFFFFFFF,
+			xproto.GravityCenter,
 			1,
 		})
 
@@ -175,21 +182,20 @@ func main() {
 		return
 	}
 
-	/*
-	err = xproto.MapWindowChecked(X, popup_win).Check()
-	if err != nil {
-		fmt.Println(stderr, "Failed to map popup: ", err)
-		return
-	}*/
-
+	font, _ := xproto.NewFontId(X)
+	font_name := "-*-terminus-medium-r-*-*-18-*-*-*-*-*-iso8859-*"
+	xproto.OpenFont(X, font, uint16(len(font_name)), font_name)
+	
 	gc, _ = xproto.NewGcontextId(X)
 	MustGC("gc", xproto.CreateGCChecked(X, gc,
 		xproto.Drawable(screen.Root),
-		xproto.GcForeground,
+		xproto.GcForeground | xproto.GcFont,
 		[]uint32{
 			0xFF000000,
+			uint32(font),
 		}))
-
+	xproto.CloseFont(X, font)
+	
 	go UpdateProc()
 	// Event loop...
 	for {
@@ -197,10 +203,18 @@ func main() {
 		if ev == nil && err == nil {
 			fmt.Fprintln(stderr, "Both event and error are nil. This should never happen")
 			return
-		} else if ev != nil {
-			fmt.Println("Event: ", ev)
 		} else if err != nil {
 			fmt.Println("Error: ", err)
+			continue
+		}
+
+		switch ev.(type) {
+		case xproto.EnterNotifyEvent:
+			ShowPopup()
+		case xproto.LeaveNotifyEvent:
+			HidePopup()
+		default:
+			fmt.Println("Event: ", ev)
 		}
 
 	}
@@ -216,6 +230,15 @@ type CheckerBackend interface {
 	Init() error
 	Check() (*PowerStatus, error)
 	Stop()
+}
+
+func string2c2b(text string) (res []xproto.Char2b) {
+	res = make([]xproto.Char2b, 0, len(text))
+	for _, c := range text {
+		// hope that the character is in range...
+		res = append(res, xproto.Char2b{byte(c >> 8), byte(c)})
+	}
+	return
 }
 
 func DrawBar(status *PowerStatus) {
@@ -250,7 +273,39 @@ func DrawBar(status *PowerStatus) {
 		[]xproto.Rectangle{
 			{int16(drawAmt), 0, bar_length - drawAmt, bar_width},
 		})
-	var _ = drawAmt
+
+	if popup_visible {
+		xproto.ChangeGC(X, gc,
+			xproto.GcForeground | xproto.GcBackground,
+			[]uint32{color_black, color_white})
+
+		windowContent := fmt.Sprintf("Charge level: %d%%",
+			int(status.ChargeLevel * 100 + 0.5))
+		contentc2b := string2c2b(windowContent)
+		
+		extents, err := xproto.QueryTextExtents(X, xproto.Fontable(gc),
+			contentc2b, uint16(len(contentc2b))).Reply()
+		if err != nil {
+			fmt.Fprintln(stderr, "Error measuring text: ", err)
+			return
+		}
+
+		pop_width := uint32(extents.OverallWidth + 10)
+		pop_height := uint32(extents.FontAscent + extents.FontDescent + 10)
+		pop_x := (uint32(screen.WidthInPixels) - pop_width) / 2
+		pop_y := (uint32(screen.HeightInPixels) - pop_height) / 2
+		xproto.ConfigureWindow(X, popup_win,
+			xproto.ConfigWindowX |
+				xproto.ConfigWindowY |
+				xproto.ConfigWindowWidth |
+				xproto.ConfigWindowHeight,
+			[]uint32{pop_x, pop_y, pop_width, pop_height})
+		
+		xproto.ImageText16(X, byte(len(contentc2b)),
+			xproto.Drawable(popup_win),
+			gc, 5, 5 + extents.FontAscent, contentc2b)
+	}
+	
 }
 
 func UpdateProc() {
@@ -261,6 +316,7 @@ func UpdateProc() {
 
 	for {
 		status, err := checker.Check()
+		current_state = status
 		if err != nil {
 			fmt.Fprintf(stderr,
 				"Failed to check battery level: %s", err)
@@ -270,4 +326,26 @@ func UpdateProc() {
 		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func ShowPopup() {
+	if popup_visible {
+		return
+	}
+	err := xproto.MapWindowChecked(X, popup_win).Check()
+	if err != nil {
+		fmt.Println(stderr, "Failed to map popup: ", err)
+		return
+	}
+
+	popup_visible = true
+	DrawBar(current_state)
+}
+
+func HidePopup() {
+	if !popup_visible {
+		return
+	}
+	xproto.UnmapWindow(X, popup_win)
+	popup_visible = false
 }
