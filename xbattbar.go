@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/BurntSushi/xgb"
 	"github.com/BurntSushi/xgb/xproto"
@@ -10,6 +11,7 @@ import (
 	"time"
 	"github.com/BurntSushi/xgbutil/motif"
 	"github.com/BurntSushi/xgbutil/icccm"
+	"strings"
 )
 
 var XU *xgbutil.XUtil
@@ -23,6 +25,9 @@ var bar_width uint16 = 3
 var popup_visible = false
 
 var current_state *PowerStatus
+
+var checker_flag = flag.String("checker", "upower", "The checker to use. Some checkers may require arguments; these may be given after a ':'")
+var update_freq = flag.Int("r", 5, "Time between updates, in seconds")
 
 var (
 	color_black          uint32 = 0xFF000000
@@ -83,6 +88,8 @@ func (a *Atomizer) Flush() error {
 }
 
 func main() {
+	flag.Parse()
+	
 	var err error
 	XU, err = xgbutil.NewConn()
 	if err != nil {
@@ -195,7 +202,8 @@ func main() {
 			uint32(font),
 		}))
 	xproto.CloseFont(X, font)
-	
+
+	X.Sync()
 	go UpdateProc()
 	// Event loop...
 	for {
@@ -227,7 +235,7 @@ type PowerStatus struct {
 }
 
 type CheckerBackend interface {
-	Init() error
+	Init(args string) error
 	Check() (*PowerStatus, error)
 	Stop()
 }
@@ -256,7 +264,14 @@ func DrawBar(status *PowerStatus) {
 	if status.Charging {
 		fg, bg = color_charging_fg, color_charging_bg
 	} else {
-		fg, bg = color_discharging_fg, color_discharging_bg
+		fg = color_discharging_fg
+		if status.ChargeLevel < 0.5 {
+			f := (uint32(0xff * (status.ChargeLevel * 2)) << 8)
+			fmt.Printf("%x\n", f)
+			bg = 0xffff0000 | f
+		} else {
+			bg = 0xff00ff00 | uint32(0xff * ((1 - status.ChargeLevel) * 2)) << 16
+		}
 	}
 
 	xproto.ChangeGC(X, gc,
@@ -309,8 +324,21 @@ func DrawBar(status *PowerStatus) {
 }
 
 func UpdateProc() {
-	checker := &UPowerChecker{}
-	if err := checker.Init(); err != nil {
+	var checker CheckerBackend
+
+	checker_parts := strings.SplitN(*checker_flag, ":", 2)
+	if len(checker_parts) < 2 {
+		checker_parts = append(checker_parts, "", "")
+	}
+	switch checker_parts[0] {
+	case "upower":
+		checker = &UPowerChecker{}
+	case "debug":
+		checker = &DebugChecker{}
+	default:
+		panic("Unknown checker " + checker_parts[0])
+	}
+	if err := checker.Init(checker_parts[1]); err != nil {
 		panic(err)
 	}
 
@@ -324,7 +352,7 @@ func UpdateProc() {
 			fmt.Printf("Drawing %v\n", status)
 			DrawBar(status)
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Duration(*update_freq) * time.Second)
 	}
 }
 

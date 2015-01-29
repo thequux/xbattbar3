@@ -10,7 +10,7 @@ type UPowerChecker struct {
 }
 var _ CheckerBackend = &UPowerChecker{}
 
-func (c *UPowerChecker) Init() error {
+func (c *UPowerChecker) Init(string) error {
 	var err error
 	c.conn, err = dbus.SystemBus()
 	if err != nil {
