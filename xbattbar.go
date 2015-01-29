@@ -249,6 +249,27 @@ func string2c2b(text string) (res []xproto.Char2b) {
 	return
 }
 
+type RGBA struct {
+	R,G,B,A byte
+}
+
+func (rgba RGBA) Uint32() uint32 {
+	return (uint32(rgba.A) << 24 |
+		uint32(rgba.R) << 16 |
+		uint32(rgba.G) <<  8 |
+		uint32(rgba.B))
+}
+
+func (a RGBA) Lerp(b RGBA, r float32) RGBA {
+	ir := 1 - r
+	return RGBA{
+		byte(float32(a.R) * ir + float32(b.R) * r),
+		byte(float32(a.G) * ir + float32(b.G) * r),
+		byte(float32(a.B) * ir + float32(b.B) * r),
+		byte(float32(a.A) * ir + float32(b.A) * r),
+	}
+}
+
 func DrawBar(status *PowerStatus) {
 	var drawAmt uint16
 	if status.ChargeLevel >= 1 {
@@ -266,11 +287,13 @@ func DrawBar(status *PowerStatus) {
 	} else {
 		fg = color_discharging_fg
 		if status.ChargeLevel < 0.5 {
-			f := (uint32(0xff * (status.ChargeLevel * 2)) << 8)
-			fmt.Printf("%x\n", f)
-			bg = 0xffff0000 | f
+			bg = RGBA{255,0,0,255}.Lerp(
+				RGBA{255,255,0,255},
+				status.ChargeLevel * 2).Uint32()
 		} else {
-			bg = 0xff00ff00 | uint32(0xff * ((1 - status.ChargeLevel) * 2)) << 16
+			bg = RGBA{0,255,0,255}.Lerp(
+				RGBA{255,255,0,255},
+				(1-status.ChargeLevel) * 2).Uint32()
 		}
 	}
 
@@ -349,7 +372,6 @@ func UpdateProc() {
 			fmt.Fprintf(stderr,
 				"Failed to check battery level: %s", err)
 		} else {
-			fmt.Printf("Drawing %v\n", status)
 			DrawBar(status)
 		}
 		time.Sleep(time.Duration(*update_freq) * time.Second)
