@@ -35,7 +35,7 @@ const (
 )
 
 var checker_flag = flag.String("checker", "upower", "The checker to use. Some checkers may require arguments; these may be given after a ':'")
-var update_freq = flag.Int("r", 5, "Time between updates, in seconds")
+var update_freq = flag.Duration("r", 5 * time.Second, "Time between updates")
 var side = BOTTOM
 
 func (s ScreenSide) String() string {
@@ -449,7 +449,7 @@ func UpdateProc() {
 		} else {
 			DrawBar(status)
 		}
-		time.Sleep(time.Duration(*update_freq) * time.Second)
+		time.Sleep(*update_freq)
 	}
 }
 
