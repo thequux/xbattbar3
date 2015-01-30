@@ -21,7 +21,7 @@ var bar_win xproto.Window
 var popup_win xproto.Window
 var horizontal bool
 var bar_length uint16
-var bar_width uint16 = 3
+var bar_width uint16
 var popup_visible = false
 
 var current_state *PowerStatus
@@ -119,7 +119,9 @@ func (a *Atomizer) Flush() error {
 
 func main() {
 	flag.Var(&side, "side", "Which side of the screen to put the bar on (l,r,t,b)")
+	bar_width_f := flag.Int("w", 3, "Thickness of bar")
 	flag.Parse()
+	bar_width = uint16(*bar_width_f)
 
 	var err error
 	XU, err = xgbutil.NewConn()
