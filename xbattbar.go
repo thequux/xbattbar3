@@ -7,11 +7,11 @@ import (
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
 	"github.com/BurntSushi/xgbutil/ewmh"
-	"os"
-	"time"
-	"github.com/BurntSushi/xgbutil/motif"
 	"github.com/BurntSushi/xgbutil/icccm"
+	"github.com/BurntSushi/xgbutil/motif"
+	"os"
 	"strings"
+	"time"
 )
 
 var XU *xgbutil.XUtil
@@ -32,8 +32,8 @@ var update_freq = flag.Int("r", 5, "Time between updates, in seconds")
 var (
 	color_black          uint32 = 0xFF000000
 	color_white          uint32 = 0xFFFFFFFF
-	color_charging_bg    uint32 = 0xFF008800
-	color_charging_fg    uint32 = 0xFF00FF00
+	color_charging_bg    uint32 = 0xFF004488
+	color_charging_fg    uint32 = 0xFF0088FF
 	color_discharging_bg uint32 = 0xFF880000
 	color_discharging_fg uint32 = 0xFF0088FF
 	gc                   xproto.Gcontext
@@ -89,7 +89,7 @@ func (a *Atomizer) Flush() error {
 
 func main() {
 	flag.Parse()
-	
+
 	var err error
 	XU, err = xgbutil.NewConn()
 	if err != nil {
@@ -118,11 +118,11 @@ func main() {
 				xproto.EventMaskKeyPress |
 				xproto.EventMaskKeyRelease |
 				xproto.EventMaskEnterWindow |
-				xproto.EventMaskLeaveWindow ,
+				xproto.EventMaskLeaveWindow,
 		})
 
 	xproto.CreateWindow(X, screen.RootDepth, popup_win, screen.Root,
-		int16(screen.WidthInPixels / 2), int16(screen.HeightInPixels/2),
+		int16(screen.WidthInPixels/2), int16(screen.HeightInPixels/2),
 		50, 50, 1,
 		xproto.WindowClassInputOutput,
 		screen.RootVisual,
@@ -156,7 +156,7 @@ func main() {
 	ewmh.WmStateSet(XU, bar_win, []string{"_NET_WM_STATE_STICKY", "_NET_WM_STATE_ABOVE"})
 
 	motif.WmHintsSet(XU, bar_win, &motif.Hints{
-		Flags: motif.HintDecorations,
+		Flags:      motif.HintDecorations,
 		Decoration: motif.DecorationNone,
 	})
 
@@ -171,18 +171,17 @@ func main() {
 			icccm.SizeHintPMaxSize |
 			icccm.SizeHintPMinSize |
 			icccm.SizeHintPWinGravity,
-		X: 0,
-		Y: int(screen.HeightInPixels-bar_width),
-		Width: uint(screen.WidthInPixels),
-		Height: uint(bar_width),
-		MinWidth: uint(screen.WidthInPixels),
-		MaxWidth: uint(screen.WidthInPixels),
-		MinHeight: uint(screen.HeightInPixels),
-		MaxHeight: uint(screen.HeightInPixels),
+		X:          0,
+		Y:          int(screen.HeightInPixels - bar_width),
+		Width:      uint(screen.WidthInPixels),
+		Height:     uint(bar_width),
+		MinWidth:   uint(screen.WidthInPixels),
+		MaxWidth:   uint(screen.WidthInPixels),
+		MinHeight:  uint(screen.HeightInPixels),
+		MaxHeight:  uint(screen.HeightInPixels),
 		WinGravity: xproto.GravitySouthWest,
-		
 	})
-	
+
 	err = xproto.MapWindowChecked(X, bar_win).Check()
 	if err != nil {
 		fmt.Fprintln(stderr, "Failed to map window: ", err)
@@ -192,11 +191,11 @@ func main() {
 	font, _ := xproto.NewFontId(X)
 	font_name := "-*-terminus-medium-r-*-*-18-*-*-*-*-*-iso8859-*"
 	xproto.OpenFont(X, font, uint16(len(font_name)), font_name)
-	
+
 	gc, _ = xproto.NewGcontextId(X)
 	MustGC("gc", xproto.CreateGCChecked(X, gc,
 		xproto.Drawable(screen.Root),
-		xproto.GcForeground | xproto.GcFont,
+		xproto.GcForeground|xproto.GcFont,
 		[]uint32{
 			0xFF000000,
 			uint32(font),
@@ -221,8 +220,10 @@ func main() {
 			ShowPopup()
 		case xproto.LeaveNotifyEvent:
 			HidePopup()
-		default:
-			fmt.Println("Event: ", ev)
+		case xproto.MapNotifyEvent:
+			DrawBar(current_state)
+			//default:
+			//	fmt.Println("Event: ", ev)
 		}
 
 	}
@@ -250,23 +251,23 @@ func string2c2b(text string) (res []xproto.Char2b) {
 }
 
 type RGBA struct {
-	R,G,B,A byte
+	R, G, B, A byte
 }
 
 func (rgba RGBA) Uint32() uint32 {
-	return (uint32(rgba.A) << 24 |
-		uint32(rgba.R) << 16 |
-		uint32(rgba.G) <<  8 |
+	return (uint32(rgba.A)<<24 |
+		uint32(rgba.R)<<16 |
+		uint32(rgba.G)<<8 |
 		uint32(rgba.B))
 }
 
 func (a RGBA) Lerp(b RGBA, r float32) RGBA {
 	ir := 1 - r
 	return RGBA{
-		byte(float32(a.R) * ir + float32(b.R) * r),
-		byte(float32(a.G) * ir + float32(b.G) * r),
-		byte(float32(a.B) * ir + float32(b.B) * r),
-		byte(float32(a.A) * ir + float32(b.A) * r),
+		byte(float32(a.R)*ir + float32(b.R)*r),
+		byte(float32(a.G)*ir + float32(b.G)*r),
+		byte(float32(a.B)*ir + float32(b.B)*r),
+		byte(float32(a.A)*ir + float32(b.A)*r),
 	}
 }
 
@@ -285,16 +286,19 @@ func DrawBar(status *PowerStatus) {
 	if status.Charging {
 		fg, bg = color_charging_fg, color_charging_bg
 	} else {
-		fg = color_discharging_fg
+		var fg_rgba, bg_rgba RGBA
 		if status.ChargeLevel < 0.5 {
-			bg = RGBA{255,0,0,255}.Lerp(
-				RGBA{255,255,0,255},
-				status.ChargeLevel * 2).Uint32()
+			fg_rgba = RGBA{255, 0, 0, 255}.Lerp(
+				RGBA{255, 255, 0, 255},
+				status.ChargeLevel*2)
 		} else {
-			bg = RGBA{0,255,0,255}.Lerp(
-				RGBA{255,255,0,255},
-				(1-status.ChargeLevel) * 2).Uint32()
+			fg_rgba = RGBA{0, 255, 0, 255}.Lerp(
+				RGBA{255, 255, 0, 255},
+				(1-status.ChargeLevel)*2)
 		}
+
+		bg_rgba = fg_rgba.Lerp(RGBA{0, 0, 0, 0}, 0.3)
+		fg, bg = fg_rgba.Uint32(), bg_rgba.Uint32()
 	}
 
 	xproto.ChangeGC(X, gc,
@@ -314,13 +318,13 @@ func DrawBar(status *PowerStatus) {
 
 	if popup_visible {
 		xproto.ChangeGC(X, gc,
-			xproto.GcForeground | xproto.GcBackground,
+			xproto.GcForeground|xproto.GcBackground,
 			[]uint32{color_black, color_white})
 
 		windowContent := fmt.Sprintf("Charge level: %d%%",
-			int(status.ChargeLevel * 100 + 0.5))
+			int(status.ChargeLevel*100+0.5))
 		contentc2b := string2c2b(windowContent)
-		
+
 		extents, err := xproto.QueryTextExtents(X, xproto.Fontable(gc),
 			contentc2b, uint16(len(contentc2b))).Reply()
 		if err != nil {
@@ -333,17 +337,17 @@ func DrawBar(status *PowerStatus) {
 		pop_x := (uint32(screen.WidthInPixels) - pop_width) / 2
 		pop_y := (uint32(screen.HeightInPixels) - pop_height) / 2
 		xproto.ConfigureWindow(X, popup_win,
-			xproto.ConfigWindowX |
-				xproto.ConfigWindowY |
-				xproto.ConfigWindowWidth |
+			xproto.ConfigWindowX|
+				xproto.ConfigWindowY|
+				xproto.ConfigWindowWidth|
 				xproto.ConfigWindowHeight,
 			[]uint32{pop_x, pop_y, pop_width, pop_height})
-		
+
 		xproto.ImageText16(X, byte(len(contentc2b)),
 			xproto.Drawable(popup_win),
-			gc, 5, 5 + extents.FontAscent, contentc2b)
+			gc, 5, 5+extents.FontAscent, contentc2b)
 	}
-	
+
 }
 
 func UpdateProc() {
