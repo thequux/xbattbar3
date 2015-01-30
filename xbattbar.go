@@ -26,8 +26,38 @@ var popup_visible = false
 
 var current_state *PowerStatus
 
+type ScreenSide int
+const (
+	LEFT ScreenSide = iota
+	TOP
+	RIGHT
+	BOTTOM
+)
+
 var checker_flag = flag.String("checker", "upower", "The checker to use. Some checkers may require arguments; these may be given after a ':'")
 var update_freq = flag.Int("r", 5, "Time between updates, in seconds")
+var side = BOTTOM
+
+func (s ScreenSide) String() string {
+	switch s {
+	case LEFT: return "left"
+	case TOP: return "top"
+	case RIGHT: return "right"
+	case BOTTOM: return "bottom"
+	}
+	return "unknown"
+}
+
+func (s *ScreenSide) Set(v string) error {
+	switch strings.ToLower(v) {
+	case "left", "l": *s = LEFT
+	case "right", "r": *s = RIGHT
+	case "top", "t": *s = TOP
+	case "bottom", "b": *s = BOTTOM
+	default: return fmt.Errorf("Valid sides: l,r,t,b,left,right,top,bottom")
+	}
+	return nil
+}
 
 var (
 	color_black          uint32 = 0xFF000000
@@ -88,6 +118,7 @@ func (a *Atomizer) Flush() error {
 }
 
 func main() {
+	flag.Var(&side, "side", "Which side of the screen to put the bar on (l,r,t,b)")
 	flag.Parse()
 
 	var err error
@@ -101,13 +132,38 @@ func main() {
 	setup := xproto.Setup(X)
 	screen = setup.DefaultScreen(X)
 
-	bar_length = screen.WidthInPixels
+	var bar_x, bar_y int16
+	var bar_w, bar_h uint16
+
+	switch side {
+	case TOP:
+		bar_x, bar_y = 0,0
+		bar_w, bar_h = screen.WidthInPixels, bar_width
+		horizontal = true
+	case BOTTOM:
+		bar_x, bar_y = 0, int16(screen.HeightInPixels-bar_width)
+		bar_w, bar_h = screen.WidthInPixels, bar_width
+		horizontal = true
+	case LEFT:
+		bar_x, bar_y = 0,0
+		bar_w, bar_h = bar_width, screen.HeightInPixels
+		horizontal = false
+	case RIGHT:
+		bar_x, bar_y = int16(screen.WidthInPixels-bar_width), 0
+		bar_w, bar_h = bar_width, screen.HeightInPixels
+		horizontal = false
+	}
+	if horizontal {
+		bar_length = screen.WidthInPixels
+	} else {
+		bar_length = screen.HeightInPixels
+	}
 
 	bar_win, _ = xproto.NewWindowId(X)
 	popup_win, _ = xproto.NewWindowId(X)
+
 	xproto.CreateWindow(X, screen.RootDepth, bar_win, screen.Root,
-		0, int16(screen.HeightInPixels-bar_width),
-		screen.WidthInPixels, 3, 0,
+		bar_x, bar_y, bar_w, bar_h, 0,
 		xproto.WindowClassInputOutput,
 		screen.RootVisual,
 		xproto.CwBackPixel|
@@ -278,8 +334,7 @@ func DrawBar(status *PowerStatus) {
 	} else if status.ChargeLevel <= 0 {
 		drawAmt = 0
 	} else {
-		drawAmt = uint16(float32(screen.WidthInPixels) *
-			status.ChargeLevel)
+		drawAmt = uint16(float32(bar_length) * status.ChargeLevel)
 	}
 
 	var fg, bg uint32
@@ -297,24 +352,38 @@ func DrawBar(status *PowerStatus) {
 				(1-status.ChargeLevel)*2)
 		}
 
-		bg_rgba = fg_rgba.Lerp(RGBA{0, 0, 0, 0}, 0.3)
+		bg_rgba = fg_rgba.Lerp(RGBA{0, 0, 0, 0xFF}, 0.3)
 		fg, bg = fg_rgba.Uint32(), bg_rgba.Uint32()
 	}
 
 	xproto.ChangeGC(X, gc,
 		xproto.GcForeground,
 		[]uint32{fg})
-	xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
-		[]xproto.Rectangle{
-			{0, 0, drawAmt, bar_width},
-		})
+	if horizontal {
+		xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
+			[]xproto.Rectangle{
+				{0, 0, drawAmt, bar_width},
+			})
+	} else {
+		xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
+			[]xproto.Rectangle{
+				{0, int16(bar_length - drawAmt), bar_width, drawAmt},
+			})
+	}
 	xproto.ChangeGC(X, gc,
 		xproto.GcForeground,
 		[]uint32{bg})
-	xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
-		[]xproto.Rectangle{
-			{int16(drawAmt), 0, bar_length - drawAmt, bar_width},
-		})
+	if horizontal {
+		xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
+			[]xproto.Rectangle{
+				{int16(drawAmt), 0, bar_length - drawAmt, bar_width},
+			})
+	} else {
+		xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
+			[]xproto.Rectangle{
+				{0, 0, bar_width, uint16(bar_length - drawAmt)},
+			})
+	}
 
 	if popup_visible {
 		xproto.ChangeGC(X, gc,
