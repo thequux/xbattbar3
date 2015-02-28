@@ -176,7 +176,8 @@ func main() {
 				xproto.EventMaskKeyPress |
 				xproto.EventMaskKeyRelease |
 				xproto.EventMaskEnterWindow |
-				xproto.EventMaskLeaveWindow,
+				xproto.EventMaskLeaveWindow |
+				xproto.EventMaskExposure,
 		})
 
 	xproto.CreateWindow(X, screen.RootDepth, popup_win, screen.Root,
@@ -280,6 +281,8 @@ func main() {
 			HidePopup()
 		case xproto.MapNotifyEvent:
 			DrawBar(current_state)
+		case xproto.ExposeEvent:
+			DrawBar(current_state)
 			//default:
 			//	fmt.Println("Event: ", ev)
 		}
@@ -331,6 +334,26 @@ func (a RGBA) Lerp(b RGBA, r float32) RGBA {
 
 func DrawBar(status *PowerStatus) {
 	var drawAmt uint16
+	if status == nil {
+		fg := RGBA{128,128,128,255}.Uint32()
+		
+		xproto.ChangeGC(X, gc,
+			xproto.GcForeground,
+			[]uint32{fg})
+		
+		if horizontal {
+			xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
+				[]xproto.Rectangle{
+					{0, 0, bar_length, bar_width},
+				})
+		} else {
+			xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
+				[]xproto.Rectangle{
+					{0, 0, bar_width, bar_length},
+				})
+		}
+		return
+	}
 	if status.ChargeLevel >= 1 {
 		drawAmt = bar_length
 	} else if status.ChargeLevel <= 0 {
