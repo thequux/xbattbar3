@@ -27,6 +27,7 @@ var popup_visible = false
 var current_state *PowerStatus
 
 type ScreenSide int
+
 const (
 	LEFT ScreenSide = iota
 	TOP
@@ -35,26 +36,35 @@ const (
 )
 
 var checker_flag = flag.String("checker", "upower", "The checker to use. Some checkers may require arguments; these may be given after a ':'")
-var update_freq = flag.Duration("r", 5 * time.Second, "Time between updates")
+var update_freq = flag.Duration("r", 5*time.Second, "Time between updates")
 var side = BOTTOM
 
 func (s ScreenSide) String() string {
 	switch s {
-	case LEFT: return "left"
-	case TOP: return "top"
-	case RIGHT: return "right"
-	case BOTTOM: return "bottom"
+	case LEFT:
+		return "left"
+	case TOP:
+		return "top"
+	case RIGHT:
+		return "right"
+	case BOTTOM:
+		return "bottom"
 	}
 	return "unknown"
 }
 
 func (s *ScreenSide) Set(v string) error {
 	switch strings.ToLower(v) {
-	case "left", "l": *s = LEFT
-	case "right", "r": *s = RIGHT
-	case "top", "t": *s = TOP
-	case "bottom", "b": *s = BOTTOM
-	default: return fmt.Errorf("Valid sides: l,r,t,b,left,right,top,bottom")
+	case "left", "l":
+		*s = LEFT
+	case "right", "r":
+		*s = RIGHT
+	case "top", "t":
+		*s = TOP
+	case "bottom", "b":
+		*s = BOTTOM
+	default:
+		return fmt.Errorf("Valid sides: l,r,t,b,left,right,top,bottom")
 	}
 	return nil
 }
@@ -139,7 +149,7 @@ func main() {
 
 	switch side {
 	case TOP:
-		bar_x, bar_y = 0,0
+		bar_x, bar_y = 0, 0
 		bar_w, bar_h = screen.WidthInPixels, bar_width
 		horizontal = true
 	case BOTTOM:
@@ -147,7 +157,7 @@ func main() {
 		bar_w, bar_h = screen.WidthInPixels, bar_width
 		horizontal = true
 	case LEFT:
-		bar_x, bar_y = 0,0
+		bar_x, bar_y = 0, 0
 		bar_w, bar_h = bar_width, screen.HeightInPixels
 		horizontal = false
 	case RIGHT:
@@ -204,13 +214,41 @@ func main() {
 		return
 	}
 
-	ewmh.WmStrutPartialSet(XU, bar_win, &ewmh.WmStrutPartial{
-		0, 0, 0, uint(bar_width),
-		0, 0, 0, 0, 0, 0, 0, uint(screen.WidthInPixels),
-	})
-	ewmh.WmStrutSet(XU, bar_win, &ewmh.WmStrut{
-		0, 0, 0, uint(bar_width),
-	})
+	switch side {
+	case BOTTOM:
+		ewmh.WmStrutPartialSet(XU, bar_win, &ewmh.WmStrutPartial{
+			0, 0, 0, uint(bar_width),
+			0, 0, 0, 0, 0, 0, 0, uint(screen.WidthInPixels),
+		})
+		ewmh.WmStrutSet(XU, bar_win, &ewmh.WmStrut{
+			0, 0, 0, uint(bar_width),
+		})
+	case TOP:
+		ewmh.WmStrutPartialSet(XU, bar_win, &ewmh.WmStrutPartial{
+			0, 0, uint(bar_width), 0,
+			0, 0, 0, 0, 0, uint(screen.WidthInPixels), 0, 0,
+		})
+		ewmh.WmStrutSet(XU, bar_win, &ewmh.WmStrut{
+			0, 0, uint(bar_width), 0,
+		})
+	case LEFT:
+		/*ewmh.WmStrutPartialSet(XU, bar_win, &ewmh.WmStrutPartial{
+			uint(bar_width), 0, 0, 0,
+			0, uint(screen.HeightInPixels), 0, 0, 0, 0, 0, 0,
+		})*/
+		ewmh.WmStrutSet(XU, bar_win, &ewmh.WmStrut{
+			uint(bar_width), 0, 0, 0,
+		})
+	case RIGHT:
+		ewmh.WmStrutPartialSet(XU, bar_win, &ewmh.WmStrutPartial{
+			0, uint(bar_width), 0, 0,
+			0, 0, 0, uint(screen.HeightInPixels), 0, 0, 0, 0,
+		})
+		ewmh.WmStrutSet(XU, bar_win, &ewmh.WmStrut{
+			0, uint(bar_width), 0, 0,
+		})
+
+	}
 
 	ewmh.WmStateSet(XU, bar_win, []string{"_NET_WM_STATE_STICKY", "_NET_WM_STATE_ABOVE"})
 
@@ -224,22 +262,24 @@ func main() {
 		Flags: icccm.HintInput,
 		Input: 0,
 	})
-	icccm.WmNormalHintsSet(XU, bar_win, &icccm.NormalHints{
-		Flags: icccm.SizeHintPSize |
-			icccm.SizeHintPPosition |
-			icccm.SizeHintPMaxSize |
-			icccm.SizeHintPMinSize |
-			icccm.SizeHintPWinGravity,
-		X:          0,
-		Y:          int(screen.HeightInPixels - bar_width),
-		Width:      uint(screen.WidthInPixels),
-		Height:     uint(bar_width),
-		MinWidth:   uint(screen.WidthInPixels),
-		MaxWidth:   uint(screen.WidthInPixels),
-		MinHeight:  uint(screen.HeightInPixels),
-		MaxHeight:  uint(screen.HeightInPixels),
-		WinGravity: xproto.GravitySouthWest,
-	})
+	/*
+		icccm.WmNormalHintsSet(XU, bar_win, &icccm.NormalHints{
+			Flags: icccm.SizeHintPSize |
+				icccm.SizeHintPPosition |
+				icccm.SizeHintPMaxSize |
+				icccm.SizeHintPMinSize |
+				icccm.SizeHintPWinGravity,
+			X:          int(bar_x),
+			Y:          int(bar_y),
+			Width:      uint(bar_w),
+			Height:     uint(bar_h),
+			MinWidth:   uint(bar_w),
+			MaxWidth:   uint(bar_w),
+			MinHeight:  uint(bar_h),
+			MaxHeight:  uint(bar_h),
+			WinGravity: xproto.GravitySouthWest,
+		})
+	*/
 
 	err = xproto.MapWindowChecked(X, bar_win).Check()
 	if err != nil {
@@ -248,7 +288,8 @@ func main() {
 	}
 
 	font, _ := xproto.NewFontId(X)
-	font_name := "-*-terminus-medium-r-*-*-18-*-*-*-*-*-iso8859-*"
+	font_name := "-misc-fixed-medium-r-*-*-20-*-*-*-*-*-iso8859-1"
+	// font_name := "-*-terminus-medium-r-*-*-18-*-*-*-*-*-iso8859-*"
 	xproto.OpenFont(X, font, uint16(len(font_name)), font_name)
 
 	gc, _ = xproto.NewGcontextId(X)
@@ -332,15 +373,21 @@ func (a RGBA) Lerp(b RGBA, r float32) RGBA {
 	}
 }
 
+var (
+	ColorEmpty Oklab = RGB{1, 0, 0}.ToOklab()
+	ColorMid   Oklab = RGB{1, 1, 0}.ToOklab()
+	ColorFull  Oklab = RGB{0, 1, 0}.ToOklab()
+)
+
 func DrawBar(status *PowerStatus) {
 	var drawAmt uint16
 	if status == nil {
-		fg := RGBA{128,128,128,255}.Uint32()
-		
+		fg := RGBA{128, 128, 128, 255}.Uint32()
+
 		xproto.ChangeGC(X, gc,
 			xproto.GcForeground,
 			[]uint32{fg})
-		
+
 		if horizontal {
 			xproto.PolyFillRectangle(X, xproto.Drawable(bar_win), gc,
 				[]xproto.Rectangle{
@@ -366,19 +413,28 @@ func DrawBar(status *PowerStatus) {
 	if status.Charging {
 		fg, bg = color_charging_fg, color_charging_bg
 	} else {
-		var fg_rgba, bg_rgba RGBA
-		if status.ChargeLevel < 0.5 {
-			fg_rgba = RGBA{255, 0, 0, 255}.Lerp(
-				RGBA{255, 255, 0, 255},
-				status.ChargeLevel*2)
-		} else {
-			fg_rgba = RGBA{0, 255, 0, 255}.Lerp(
-				RGBA{255, 255, 0, 255},
-				(1-status.ChargeLevel)*2)
-		}
+		var fg_oklab, bg_oklab Oklab
+		/*
+			if status.ChargeLevel < 0.5 {
+				fg_oklab = ColorEmpty.Lerp(
+					ColorMid,
+					status.ChargeLevel*2)
+			} else {
+				fg_oklab = ColorFull.Lerp(
+					ColorMid,
+					(1-status.ChargeLevel)*2)
+			}
+		*/
 
-		bg_rgba = fg_rgba.Lerp(RGBA{0, 0, 0, 0xFF}, 0.3)
-		fg, bg = fg_rgba.Uint32(), bg_rgba.Uint32()
+		fg_oklab = ColorEmpty.Lerp(ColorFull, status.ChargeLevel)
+
+		bg_oklab = fg_oklab
+		bg_oklab.L = bg_oklab.L * 0.7
+		fg_rgba := fg_oklab.ToRGB()
+		fg = fg_rgba.ToRGBA(255).Uint32()
+		bg_rgba := bg_oklab.ToRGB()
+		bg = bg_rgba.ToRGBA(255).Uint32()
+		//fmt.Fprintf(stderr, "FG: %#v  bg: %v\n", ColorFull, bg_rgba)
 	}
 
 	xproto.ChangeGC(X, gc,
@@ -470,6 +526,7 @@ func UpdateProc() {
 			fmt.Fprintf(stderr,
 				"Failed to check battery level: %s", err)
 		} else {
+			//fmt.Fprintf(stderr, "Current status: %v", status)
 			DrawBar(status)
 		}
 		time.Sleep(*update_freq)
