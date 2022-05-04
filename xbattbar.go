@@ -36,7 +36,8 @@ const (
 )
 
 var checker_flag = flag.String("checker", "upower", "The checker to use. Some checkers may require arguments; these may be given after a ':'")
-var update_freq = flag.Duration("r", 5*time.Second, "Time between updates")
+var update_freq = flag.Duration("r", 5 * time.Second, "Time between updates")
+var font_name = flag.String("fn", "-*-terminus-medium-r-*-*-18-*-*-*-*-*-iso8859-*", "The font to display battery percentage with")
 var side = BOTTOM
 
 func (s ScreenSide) String() string {
@@ -288,9 +289,7 @@ func main() {
 	}
 
 	font, _ := xproto.NewFontId(X)
-	font_name := "-misc-fixed-medium-r-*-*-20-*-*-*-*-*-iso8859-1"
-	// font_name := "-*-terminus-medium-r-*-*-18-*-*-*-*-*-iso8859-*"
-	xproto.OpenFont(X, font, uint16(len(font_name)), font_name)
+	xproto.OpenFont(X, font, uint16(len(*font_name)), *font_name)
 
 	gc, _ = xproto.NewGcontextId(X)
 	MustGC("gc", xproto.CreateGCChecked(X, gc,
